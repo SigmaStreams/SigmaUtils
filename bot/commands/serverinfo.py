@@ -1,6 +1,7 @@
 import datetime as dt
 
 import discord
+from discord import app_commands
 
 from ..helpers import NO_PINGS
 
@@ -37,13 +38,14 @@ def setup(bot):
         name="serverinfo",
         description="Show server info + member breakdown (humans vs bots).",
     )
-    async def serverinfo(interaction: discord.Interaction):
+    @app_commands.describe(ephemeral="If true, only you can see the response (default true).")
+    async def serverinfo(interaction: discord.Interaction, ephemeral: bool = True):
         guild = interaction.guild
         if guild is None:
             await interaction.response.send_message("Run this in a server, not DMs.", ephemeral=True)
             return
 
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=ephemeral)
 
         # Member breakdown (requires Members intent + ability to fetch members)
         humans = bots = 0
@@ -73,7 +75,6 @@ def setup(bot):
             inline=False,
         )
 
-        # Counts
         embed.add_field(
             name="Members",
             value=(
@@ -86,13 +87,11 @@ def setup(bot):
         if breakdown_note:
             embed.add_field(name="Note", value=breakdown_note, inline=False)
 
-        # Extras (safe + useful)
         embed.add_field(name="Boost level", value=str(guild.premium_tier), inline=True)
         embed.add_field(name="Boosts", value=str(guild.premium_subscription_count or 0), inline=True)
         embed.add_field(name="Verification", value=str(guild.verification_level), inline=True)
 
-        # Icon
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
 
-        await interaction.followup.send(embed=embed, allowed_mentions=NO_PINGS)
+        await interaction.followup.send(embed=embed, ephemeral=ephemeral, allowed_mentions=NO_PINGS)
