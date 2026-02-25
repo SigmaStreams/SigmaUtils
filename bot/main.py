@@ -10,15 +10,20 @@ from .db import ensure_db
 from .invite_tracking import snapshot_invites_to_db, detect_used_invite, log_join_event
 
 # commands
-from .commands import checkme, check, check_panel, list_roles, purge, bot_info, give_creds, test_purge_dm, whois
+from .commands import checkme, check, check_panel, list_roles, purge, bot_info, give_creds, test_purge_dm, whois, serverinfo
 from .commands import invite as invite_cmd
 from .commands import move_server
-from .commands import move_panel  # NEW
-from .commands import serverinfo
-from .commands import discord_info
+from .commands import move_panel
+
+# NEW
+from .commands import afk
+
 
 intents = discord.Intents.default()
 intents.members = True
+# NOTE: message content intent is not strictly required for AFK detection via mentions/replies,
+# but enabling it improves reliability if you ever want to inspect message text.
+# intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -119,9 +124,12 @@ def load_commands():
     invite_cmd.setup(bot)
     whois.setup(bot)
     serverinfo.setup(bot)
-    discord_info.setup(bot)
+
     move_server.setup(bot)
-    move_panel.setup(bot)  # NEW
+    move_panel.setup(bot)
+
+    # NEW
+    afk.setup(bot)
 
 
 load_commands()
