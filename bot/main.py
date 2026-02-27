@@ -14,7 +14,7 @@ from .commands import checkme, check, check_panel, list_roles, purge, bot_info, 
 from .commands import invite as invite_cmd
 from .commands import move_server
 from .commands import move_panel
-
+from .commands import discord_info
 # NEW
 from .commands import afk
 
@@ -124,7 +124,7 @@ def load_commands():
     invite_cmd.setup(bot)
     whois.setup(bot)
     serverinfo.setup(bot)
-
+    discord_info.setup(bot)
     move_server.setup(bot)
     move_panel.setup(bot)
 
