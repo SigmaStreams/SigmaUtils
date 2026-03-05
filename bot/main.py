@@ -18,6 +18,7 @@ from .commands import discord_info
 # NEW
 from .commands import afk
 from .commands import server_status
+from .commands import silent_ping
 
 intents = discord.Intents.default()
 intents.members = True
@@ -131,6 +132,7 @@ def load_commands():
     # NEW
     afk.setup(bot)
     server_status.setup(bot)
+    silent_ping.setup(bot)
 
 load_commands()
 bot.run(TOKEN)
