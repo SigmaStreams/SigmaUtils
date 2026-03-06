@@ -30,6 +30,34 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 bot.version = "modular-v1"
 
+NEW_ACCOUNT_WARNING_DAYS = 90
+
+
+def _utc_now() -> dt.datetime:
+    return dt.datetime.now(dt.timezone.utc)
+
+
+def _ensure_utc(d: dt.datetime | None) -> dt.datetime | None:
+    if d is None:
+        return None
+    if d.tzinfo is None:
+        return d.replace(tzinfo=dt.timezone.utc)
+    return d
+
+
+def _ts_full(d: dt.datetime | None) -> str:
+    d = _ensure_utc(d)
+    if d is None:
+        return "unknown"
+    return f"<t:{int(d.timestamp())}:F>"
+
+
+def _ts_rel(d: dt.datetime | None) -> str:
+    d = _ensure_utc(d)
+    if d is None:
+        return "unknown"
+    return f"<t:{int(d.timestamp())}:R>"
+
 
 @bot.event
 async def on_ready():
@@ -98,10 +126,25 @@ async def on_member_join(member: discord.Member):
     except Exception as e:
         print(f"[invite-tracking] Failed to log join: {type(e).__name__}: {e}")
 
+    # Account age check
+    created_at = _ensure_utc(member.created_at)
+    is_new_account = False
+    if created_at is not None:
+        account_age = _utc_now() - created_at
+        is_new_account = account_age <= dt.timedelta(days=NEW_ACCOUNT_WARNING_DAYS)
+
+    # Standard join log
     embed = discord.Embed(
         title="Member joined",
         description=f"{member} ({member.id}) joined.",
     )
+
+    embed.add_field(
+        name="Account created",
+        value=f"{_ts_full(created_at)}\n({_ts_rel(created_at)})",
+        inline=False,
+    )
+
     if invite_info:
         inviter = f"<@{invite_info['inviter_id']}>" if invite_info.get("inviter_id") else "unknown"
         embed.add_field(name="Invite", value=f"`{invite_info['code']}`", inline=True)
@@ -110,7 +153,36 @@ async def on_member_join(member: discord.Member):
     else:
         embed.add_field(name="Invite", value=unknown_reason or "unknown", inline=False)
 
+    if is_new_account:
+        embed.add_field(
+            name="Account age warning",
+            value=f"⚠️ Account is {NEW_ACCOUNT_WARNING_DAYS} days old or less.",
+            inline=False,
+        )
+
     await send_audit_embed(guild, embed)
+
+    # Separate caution warning for new accounts
+    if is_new_account:
+        warning = discord.Embed(
+            title="New account join warning",
+            description=(
+                f"{member.mention} ({member} / {member.id}) joined with a recently created account.\n"
+                f"Please use caution."
+            ),
+            color=discord.Color.orange(),
+        )
+        warning.add_field(
+            name="Account created",
+            value=f"{_ts_full(created_at)}\n({_ts_rel(created_at)})",
+            inline=False,
+        )
+        warning.add_field(
+            name="Threshold",
+            value=f"{NEW_ACCOUNT_WARNING_DAYS} days or less",
+            inline=False,
+        )
+        await send_audit_embed(guild, warning)
 
 
 def load_commands():
@@ -128,7 +200,7 @@ def load_commands():
     discord_info.setup(bot)
     move_server.setup(bot)
     move_panel.setup(bot)
- 
+
     # NEW
     afk.setup(bot)
     server_status.setup(bot)
