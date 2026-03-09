@@ -134,9 +134,6 @@ async def on_ready():
     # Persistent view for move_server staff buttons
     bot.add_view(move_server.MoveServerActionView())
 
-    # Persistent view for move_panel button
-    bot.add_view(move_panel.MovePanelView())
-
     await ensure_db()
 
     for g in bot.guilds:

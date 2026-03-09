@@ -21,6 +21,7 @@ PANEL_BODY = (
 )
 
 PANEL_COLOR = 0xA9C9FF
+MAINTENANCE_WINDOWS_CHANNEL_ID = 1468495607801974887
 
 
 async def _start_move_flow(interaction: discord.Interaction) -> None:
@@ -79,10 +80,19 @@ class MovePanelView(discord.ui.View):
     Persistent view so the button keeps working after restarts.
     Requirements:
       - timeout=None
-      - custom_id on the button
+      - custom_id on non-link buttons
     """
-    def __init__(self):
+    def __init__(self, *, guild_id: int):
         super().__init__(timeout=None)
+
+        maintenance_url = f"https://discord.com/channels/{guild_id}/{MAINTENANCE_WINDOWS_CHANNEL_ID}"
+        self.add_item(
+            discord.ui.Button(
+                label="View Maintenance Windows",
+                style=discord.ButtonStyle.link,
+                url=maintenance_url,
+            )
+        )
 
     @discord.ui.button(
         label="Request a server move",
@@ -117,7 +127,11 @@ def setup(bot):
         embed = discord.Embed(title=PANEL_TITLE, description=PANEL_BODY, color=PANEL_COLOR)
 
         try:
-            msg = await target.send(embed=embed, view=MovePanelView(), allowed_mentions=NO_PINGS)
+            msg = await target.send(
+                embed=embed,
+                view=MovePanelView(guild_id=guild.id),
+                allowed_mentions=NO_PINGS,
+            )
         except discord.Forbidden:
             await interaction.response.send_message("I can’t post in that channel (missing perms).", ephemeral=True)
             return
