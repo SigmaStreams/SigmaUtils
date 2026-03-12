@@ -24,7 +24,9 @@ NO_PINGS = discord.AllowedMentions.none()
 CHECKME_LAST_USED: dict[int, dt.datetime] = {}
 PENDING_PURGES: dict[tuple[int, int], dict] = {}
 
-RoleMode = Literal["both", "redditor_only", "member_only"]
+EXPIRED_ROLE_ID = 1457796091834667172
+
+RoleMode = Literal["both", "redditor_only", "member_only", "expired_only"]
 
 
 # --------------------
@@ -87,16 +89,21 @@ def role_ids_excluding_everyone(member: discord.Member) -> set[int]:
 
 def member_matches_role_mode(member: discord.Member, mode: RoleMode) -> bool:
     role_ids = role_ids_excluding_everyone(member)
+    has_member = VISITOR_ROLE_ID in role_ids
+    has_redditor = REDDITOR_ROLE_ID in role_ids
+    has_expired = EXPIRED_ROLE_ID in role_ids
 
+    if mode == "expired_only":
+        return has_expired
+
+    # Existing purge modes keep old behavior
     # must have Member
-    if VISITOR_ROLE_ID not in role_ids:
+    if not has_member:
         return False
 
     # must not have any other roles besides Member/Redditor
     if not role_ids.issubset(ALLOWED_ROLE_IDS):
         return False
-
-    has_redditor = (REDDITOR_ROLE_ID in role_ids)
 
     if mode == "both":
         return True
@@ -142,6 +149,8 @@ def pretty_role_mode(mode: RoleMode) -> str:
         return "member+redditor only"
     if mode == "member_only":
         return "member only"
+    if mode == "expired_only":
+        return "expired only"
     return str(mode)
 
 
@@ -152,11 +161,20 @@ def build_checkme_message(member: discord.Member) -> str:
     role_ids = role_ids_excluding_everyone(member)
     has_member = VISITOR_ROLE_ID in role_ids
     has_redditor = REDDITOR_ROLE_ID in role_ids
+    has_expired = EXPIRED_ROLE_ID in role_ids
     has_other_roles = not role_ids.issubset(ALLOWED_ROLE_IDS)
 
-    in_scope = has_member and not has_other_roles
     days = DEFAULT_PURGE_DAYS
     time_ok = member_is_time_eligible(member, days)
+
+    # Old purge path
+    in_scope_standard = has_member and not has_other_roles
+
+    # New expired-only path
+    in_scope_expired = has_expired
+
+    at_risk_standard = in_scope_standard and time_ok
+    at_risk_expired = in_scope_expired and time_ok
 
     joined_str = rel_ts(member.joined_at) if member.joined_at else "unknown"
 
@@ -167,21 +185,38 @@ def build_checkme_message(member: discord.Member) -> str:
     lines.append("**Your roles (as the bot sees them):**")
     lines.append(f"- Has Member: **{has_member}**")
     lines.append(f"- Has Redditor: **{has_redditor}**")
+    lines.append(f"- Has Expired: **{has_expired}**")
     lines.append(f"- Has other roles: **{has_other_roles}**")
     lines.append("")
 
-    if not in_scope:
-        lines.append("✅ **Not at risk** (you’re not in the purge target group).")
-    else:
-        if time_ok:
-            lines.append("⚠️ **At risk** under default purge settings.")
-            lines.append("")
-            lines.append(f"If this is a mistake or you need access, please open a ticket in <#{TICKET_CHANNEL_ID}>.")
-        else:
-            lines.append("🟡 **Potentially at risk later** (role-wise you match, but you’re not old enough yet).")
-            lines.append(f"You’d become eligible after you’ve been in the server more than **{days}** days.")
-            lines.append(f"If you think you should already have another role, open a ticket in <#{TICKET_CHANNEL_ID}>.")
+    if at_risk_standard or at_risk_expired:
+        lines.append("⚠️ **At risk** under default purge settings.")
+        lines.append("")
+        lines.append("**Matched purge path(s):**")
+        if at_risk_standard:
+            lines.append("- Standard member/redditor purge logic")
+        if at_risk_expired:
+            lines.append("- Expired-only purge logic")
+        lines.append("")
+        lines.append(f"If this is a mistake or you need access, please open a ticket in <#{TICKET_CHANNEL_ID}>.")
+        return "\n".join(lines)
 
+    if in_scope_standard or in_scope_expired:
+        lines.append("🟡 **Potentially at risk later** (you match a purge filter, but you’re not old enough yet).")
+        lines.append("")
+
+        lines.append("**Matched purge path(s):**")
+        if in_scope_standard:
+            lines.append("- Standard member/redditor purge logic")
+        if in_scope_expired:
+            lines.append("- Expired-only purge logic")
+
+        lines.append("")
+        lines.append(f"You’d become eligible after you’ve been in the server more than **{days}** days.")
+        lines.append(f"If you think you should already have another role, open a ticket in <#{TICKET_CHANNEL_ID}>.")
+        return "\n".join(lines)
+
+    lines.append("✅ **Not at risk** (you’re not in any purge target group).")
     return "\n".join(lines)
 
 

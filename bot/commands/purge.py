@@ -57,7 +57,7 @@ def setup(bot):
         confirm="Must be true to actually kick (extra safety).",
         confirm_phrase=f"Must be: {PURGE_CONFIRM_PHRASE} (quotes optional)",
         include_bots="Include bot accounts in candidates (default false).",
-        role_mode="Which role combo to target: both (default), redditor_only, or member_only.",
+        role_mode="Which role combo to target: both (default), redditor_only, member_only, or expired_only.",
     )
     async def purge_eligible(
         interaction: discord.Interaction,
@@ -333,10 +333,9 @@ def setup(bot):
         failed: list[str] = []
 
         dm_sent = 0
-        dm_failed: list[int] = []  # store user IDs for mention formatting
+        dm_failed: list[int] = []
 
         for m in to_kick:
-            # DM attempt before kick (env-only) with retries
             if PURGE_DM_ENABLED and PURGE_DM_TEMPLATE:
                 msg = _render_purge_dm(member=m, guild=guild, days=days, role_mode=str(role_mode))
 
