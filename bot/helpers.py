@@ -25,6 +25,7 @@ CHECKME_LAST_USED: dict[int, dt.datetime] = {}
 PENDING_PURGES: dict[tuple[int, int], dict] = {}
 
 EXPIRED_ROLE_ID = 1457796091834667172
+EXPIRED_EXEMPT_ROLE_ID = 1457567060031967264
 
 RoleMode = Literal["both", "redditor_only", "member_only", "expired_only"]
 
@@ -92,9 +93,10 @@ def member_matches_role_mode(member: discord.Member, mode: RoleMode) -> bool:
     has_member = VISITOR_ROLE_ID in role_ids
     has_redditor = REDDITOR_ROLE_ID in role_ids
     has_expired = EXPIRED_ROLE_ID in role_ids
+    has_expired_exempt = EXPIRED_EXEMPT_ROLE_ID in role_ids
 
     if mode == "expired_only":
-        return has_expired
+        return has_expired and not has_expired_exempt
 
     # Existing purge modes keep old behavior
     # must have Member
@@ -162,6 +164,7 @@ def build_checkme_message(member: discord.Member) -> str:
     has_member = VISITOR_ROLE_ID in role_ids
     has_redditor = REDDITOR_ROLE_ID in role_ids
     has_expired = EXPIRED_ROLE_ID in role_ids
+    has_expired_exempt = EXPIRED_EXEMPT_ROLE_ID in role_ids
     has_other_roles = not role_ids.issubset(ALLOWED_ROLE_IDS)
 
     days = DEFAULT_PURGE_DAYS
@@ -171,7 +174,7 @@ def build_checkme_message(member: discord.Member) -> str:
     in_scope_standard = has_member and not has_other_roles
 
     # New expired-only path
-    in_scope_expired = has_expired
+    in_scope_expired = has_expired and not has_expired_exempt
 
     at_risk_standard = in_scope_standard and time_ok
     at_risk_expired = in_scope_expired and time_ok
@@ -186,6 +189,7 @@ def build_checkme_message(member: discord.Member) -> str:
     lines.append(f"- Has Member: **{has_member}**")
     lines.append(f"- Has Redditor: **{has_redditor}**")
     lines.append(f"- Has Expired: **{has_expired}**")
+    lines.append(f"- Has Expired exemption: **{has_expired_exempt}**")
     lines.append(f"- Has other roles: **{has_other_roles}**")
     lines.append("")
 
