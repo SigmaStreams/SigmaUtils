@@ -130,6 +130,23 @@ def setup(bot):
 
         expires_at = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=DEFAULT_MAX_AGE_SECONDS)
 
+        dm_status = None
+
+        # If created on behalf of someone else, try to DM them
+        if creator.id != interaction.user.id:
+            try:
+                await creator.send(
+                    (
+                        f"You’re receiving this message because **{interaction.user}** created a Discord invite on your behalf.\n\n"
+                        f"This invite goes to the server landing channel and expires <t:{int(expires_at.timestamp())}:R>.\n\n"
+                        f"Invite link:\n{inv.url}"
+                    ),
+                    allowed_mentions=NO_PINGS,
+                )
+                dm_status = "sent"
+            except Exception:
+                dm_status = "failed"
+
         if creator.id == interaction.user.id:
             msg = (
                 f"Here’s your invite link (goes to <#{INVITE_TARGET_CHANNEL_ID}>, expires <t:{int(expires_at.timestamp())}:R>):\n"
@@ -141,6 +158,13 @@ def setup(bot):
                 f"(goes to <#{INVITE_TARGET_CHANNEL_ID}>, expires <t:{int(expires_at.timestamp())}:R>):\n"
                 f"{inv.url}"
             )
+            if dm_status == "sent":
+                msg += f"\n\nI also DMed {creator.mention} to let them know why they received this invite."
+            elif dm_status == "failed":
+                msg += (
+                    f"\n\nI couldn’t DM {creator.mention} "
+                    f"(their DMs may be closed, or they may have the bot blocked)."
+                )
 
         await interaction.followup.send(
             msg,
@@ -166,7 +190,8 @@ def setup(bot):
                 f"Code: `{inv.code}`\n"
                 f"Max age: {DEFAULT_MAX_AGE_SECONDS}s\n"
                 f"Max uses: unlimited\n"
-                f"Expires: <t:{int(expires_at.timestamp())}:R>"
+                f"Expires: <t:{int(expires_at.timestamp())}:R>\n"
+                f"Recipient DM: {dm_status or 'not attempted'}"
             )
 
         embed = discord.Embed(
