@@ -3,6 +3,7 @@ import datetime as dt
 import discord
 from discord import app_commands
 
+from ..config import ALLOWED_USER_IDS
 from ..helpers import NO_PINGS, send_audit_embed
 from ..invite_tracking import snapshot_invites_to_db
 from ..db import connect
@@ -36,7 +37,10 @@ def setup(bot):
         name="invite",
         description="Create a 24h invite (unlimited uses) to the public landing channel.",
     )
-    async def invite(interaction: discord.Interaction):
+    @app_commands.describe(
+        user="Optional: create the invite on behalf of another user (staff only).",
+    )
+    async def invite(interaction: discord.Interaction, user: discord.Member | None = None):
         guild = interaction.guild
         if guild is None:
             await interaction.response.send_message("Run this in a server, not DMs.", ephemeral=True)
@@ -46,6 +50,16 @@ def setup(bot):
         if me is None:
             await interaction.response.send_message("Can't resolve bot member in this guild.", ephemeral=True)
             return
+
+        creator = interaction.user
+        if user is not None:
+            if interaction.user.id not in ALLOWED_USER_IDS:
+                await interaction.response.send_message(
+                    "You are not authorized to create invites on behalf of another user.",
+                    ephemeral=True,
+                )
+                return
+            creator = user
 
         target = await _get_target_channel(guild)
         if target is None:
@@ -66,11 +80,17 @@ def setup(bot):
         await interaction.response.defer(ephemeral=True)
 
         try:
+            reason = (
+                f"Invite created via /invite by {interaction.user} ({interaction.user.id})"
+                if creator.id == interaction.user.id
+                else f"Invite created via /invite by {interaction.user} ({interaction.user.id}) on behalf of {creator} ({creator.id})"
+            )
+
             inv = await target.create_invite(
                 max_age=DEFAULT_MAX_AGE_SECONDS,
                 max_uses=DEFAULT_MAX_USES,
                 unique=True,
-                reason=f"Invite created via /invite by {interaction.user} ({interaction.user.id})",
+                reason=reason,
             )
         except discord.Forbidden:
             await interaction.followup.send("Invite creation failed (missing permissions).", ephemeral=True)
@@ -85,7 +105,7 @@ def setup(bot):
         except Exception:
             pass
 
-        # Store “creator” as the user who ran /invite (not the bot)
+        # Store “creator” as the effective user (self or on-behalf-of target), not the bot
         try:
             now = _now_iso()
             created_at = inv.created_at.isoformat() if inv.created_at else None
@@ -102,7 +122,7 @@ def setup(bot):
                       created_at=COALESCE(invite_baseline.created_at, excluded.created_at),
                       updated_at=excluded.updated_at
                     """,
-                    (guild.id, inv.code, uses, interaction.user.id, created_at, now),
+                    (guild.id, inv.code, uses, creator.id, created_at, now),
                 )
                 await db.commit()
         except Exception:
@@ -110,22 +130,47 @@ def setup(bot):
 
         expires_at = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=DEFAULT_MAX_AGE_SECONDS)
 
+        if creator.id == interaction.user.id:
+            msg = (
+                f"Here’s your invite link (goes to <#{INVITE_TARGET_CHANNEL_ID}>, expires <t:{int(expires_at.timestamp())}:R>):\n"
+                f"{inv.url}"
+            )
+        else:
+            msg = (
+                f"Here’s an invite link for {creator.mention} "
+                f"(goes to <#{INVITE_TARGET_CHANNEL_ID}>, expires <t:{int(expires_at.timestamp())}:R>):\n"
+                f"{inv.url}"
+            )
+
         await interaction.followup.send(
-            f"Here’s your invite link (goes to <#{INVITE_TARGET_CHANNEL_ID}>, expires <t:{int(expires_at.timestamp())}:R>):\n{inv.url}",
+            msg,
             ephemeral=True,
             allowed_mentions=NO_PINGS,
         )
 
         # Audit log
-        embed = discord.Embed(
-            title="Invite created",
-            description=(
-                f"Creator: {interaction.user} ({interaction.user.id})\n"
+        if creator.id == interaction.user.id:
+            desc = (
+                f"Creator: {creator} ({creator.id})\n"
                 f"Target channel: <#{INVITE_TARGET_CHANNEL_ID}> ({INVITE_TARGET_CHANNEL_ID})\n"
                 f"Code: `{inv.code}`\n"
                 f"Max age: {DEFAULT_MAX_AGE_SECONDS}s\n"
                 f"Max uses: unlimited\n"
                 f"Expires: <t:{int(expires_at.timestamp())}:R>"
-            ),
+            )
+        else:
+            desc = (
+                f"Requested by: {interaction.user} ({interaction.user.id})\n"
+                f"Created for: {creator} ({creator.id})\n"
+                f"Target channel: <#{INVITE_TARGET_CHANNEL_ID}> ({INVITE_TARGET_CHANNEL_ID})\n"
+                f"Code: `{inv.code}`\n"
+                f"Max age: {DEFAULT_MAX_AGE_SECONDS}s\n"
+                f"Max uses: unlimited\n"
+                f"Expires: <t:{int(expires_at.timestamp())}:R>"
+            )
+
+        embed = discord.Embed(
+            title="Invite created",
+            description=desc,
         )
         await send_audit_embed(guild, embed)
