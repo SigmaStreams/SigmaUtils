@@ -28,6 +28,7 @@ from .commands import discord_info
 from .commands import afk
 from .commands import server_status
 from .commands import silent_ping
+from .commands import remove_all_pending
 
 intents = discord.Intents.default()
 intents.members = True
@@ -379,7 +380,7 @@ def load_commands():
     discord_info.setup(bot)
     move_server.setup(bot)
     move_panel.setup(bot)
-
+    remove_all_pending.setup(bot)
     afk.setup(bot)
     server_status.setup(bot)
     silent_ping.setup(bot)
