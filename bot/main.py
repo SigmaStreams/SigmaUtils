@@ -73,6 +73,30 @@ def _ts_rel(d: dt.datetime | None) -> str:
     return f"<t:{int(d.timestamp())}:R>"
 
 
+def _duration_text(start: dt.datetime | None, end: dt.datetime | None = None) -> str:
+    start = _ensure_utc(start)
+    end = _ensure_utc(end) or _utc_now()
+    if start is None:
+        return "unknown"
+
+    delta = end - start
+    total_seconds = max(0, int(delta.total_seconds()))
+
+    days, rem = divmod(total_seconds, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, _ = divmod(rem, 60)
+
+    parts: list[str] = []
+    if days:
+        parts.append(f"{days}d")
+    if hours:
+        parts.append(f"{hours}h")
+    if minutes:
+        parts.append(f"{minutes}m")
+
+    return " ".join(parts) if parts else "<1m"
+
+
 def _has_unsuppressed_plex_link(content: str) -> bool:
     return bool(PLEX_LINK_RE.search(content or ""))
 
@@ -329,6 +353,36 @@ async def on_member_join(member: discord.Member):
             inline=False,
         )
         await _send_new_account_warning_ping(guild, warning)
+
+
+@bot.event
+async def on_member_remove(member: discord.Member):
+    guild = member.guild
+    joined_at = _ensure_utc(member.joined_at)
+    created_at = _ensure_utc(member.created_at)
+
+    embed = discord.Embed(
+        title="Member left",
+        description=f"{member} ({member.id}) left.",
+    )
+
+    embed.add_field(
+        name="Joined server",
+        value=f"{_ts_full(joined_at)}\n({_ts_rel(joined_at)})",
+        inline=False,
+    )
+    embed.add_field(
+        name="Time in server",
+        value=_duration_text(joined_at),
+        inline=False,
+    )
+    embed.add_field(
+        name="Account created",
+        value=f"{_ts_full(created_at)}\n({_ts_rel(created_at)})",
+        inline=False,
+    )
+
+    await send_audit_embed(guild, embed)
 
 
 @bot.event
