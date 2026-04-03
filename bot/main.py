@@ -9,9 +9,9 @@ from .config import (
     TOKEN,
     ALLOWED_USER_IDS,
     VISITOR_ROLE_ID,
-    ACTIVE_SUBSCRIBER_ROLE_ID,
+    SS_VOD_ROLE_ID,
     EXPIRED_ROLE_ID,
-    SUBSCRIBER_ROLE_SYNC_DELAY_SECONDS,
+    SS_VOD_ROLE_SYNC_DELAY_SECONDS,
     AUDIT_LOG_CHANNEL_ID,
 )
 from .views import CheckStatusPanelView
@@ -180,20 +180,20 @@ async def _send_new_account_warning_ping(guild: discord.Guild, embed: discord.Em
     await send_audit_embed(guild, embed)
 
 
-async def _sync_subscriber_roles(member: discord.Member, *, active_should_exist: bool) -> None:
+async def _sync_subscriber_roles(member: discord.Member, *, ss_vod_should_exist: bool) -> None:
     """
-    After a short delay, enforce:
-      - if Active Subscriber exists -> remove Expired
-      - if Active Subscriber does not exist -> add Expired
+        After a short delay, enforce:
+            - if SS VOD exists -> remove Expired
+            - if SS VOD does not exist -> add Expired
     Re-checks member roles after the delay before changing anything.
     """
     if member.bot:
         return
 
-    if not ACTIVE_SUBSCRIBER_ROLE_ID or not EXPIRED_ROLE_ID:
+    if not SS_VOD_ROLE_ID or not EXPIRED_ROLE_ID:
         return
 
-    await asyncio.sleep(SUBSCRIBER_ROLE_SYNC_DELAY_SECONDS)
+    await asyncio.sleep(SS_VOD_ROLE_SYNC_DELAY_SECONDS)
 
     guild = member.guild
     refreshed = guild.get_member(member.id)
@@ -203,27 +203,27 @@ async def _sync_subscriber_roles(member: discord.Member, *, active_should_exist:
         except Exception:
             return
 
-    active_role = guild.get_role(ACTIVE_SUBSCRIBER_ROLE_ID)
+    ss_vod_role = guild.get_role(SS_VOD_ROLE_ID)
     expired_role = guild.get_role(EXPIRED_ROLE_ID)
 
-    if active_role is None or expired_role is None:
+    if ss_vod_role is None or expired_role is None:
         print(
             f"[subscriber-role-sync] Missing role(s) in guild {guild.id}: "
-            f"active={ACTIVE_SUBSCRIBER_ROLE_ID} expired={EXPIRED_ROLE_ID}"
+            f"ss_vod={SS_VOD_ROLE_ID} expired={EXPIRED_ROLE_ID}"
         )
         return
 
     role_ids = {r.id for r in refreshed.roles}
-    has_active = ACTIVE_SUBSCRIBER_ROLE_ID in role_ids
+    has_ss_vod = SS_VOD_ROLE_ID in role_ids
     has_expired = EXPIRED_ROLE_ID in role_ids
 
     try:
-        if active_should_exist:
-            if has_active and has_expired:
-                await refreshed.remove_roles(expired_role, reason="Active Subscriber gained; removing Expired")
+        if ss_vod_should_exist:
+            if has_ss_vod and has_expired:
+                await refreshed.remove_roles(expired_role, reason="SS VOD gained; removing Expired")
         else:
-            if not has_active and not has_expired:
-                await refreshed.add_roles(expired_role, reason="Active Subscriber lost; adding Expired")
+            if not has_ss_vod and not has_expired:
+                await refreshed.add_roles(expired_role, reason="SS VOD lost; adding Expired")
     except discord.Forbidden:
         print(
             f"[subscriber-role-sync] Missing permissions / hierarchy issue in guild {guild.id} "
@@ -394,23 +394,23 @@ async def on_member_update(before: discord.Member, after: discord.Member):
     if before.bot or after.bot:
         return
 
-    if not ACTIVE_SUBSCRIBER_ROLE_ID or not EXPIRED_ROLE_ID:
+    if not SS_VOD_ROLE_ID or not EXPIRED_ROLE_ID:
         return
 
     before_role_ids = {r.id for r in before.roles}
     after_role_ids = {r.id for r in after.roles}
 
-    had_active = ACTIVE_SUBSCRIBER_ROLE_ID in before_role_ids
-    has_active = ACTIVE_SUBSCRIBER_ROLE_ID in after_role_ids
+    had_ss_vod = SS_VOD_ROLE_ID in before_role_ids
+    has_ss_vod = SS_VOD_ROLE_ID in after_role_ids
 
-    # Active Subscriber was added
-    if not had_active and has_active:
-        asyncio.create_task(_sync_subscriber_roles(after, active_should_exist=True))
+    # SS VOD was added
+    if not had_ss_vod and has_ss_vod:
+        asyncio.create_task(_sync_subscriber_roles(after, ss_vod_should_exist=True))
         return
 
-    # Active Subscriber was removed
-    if had_active and not has_active:
-        asyncio.create_task(_sync_subscriber_roles(after, active_should_exist=False))
+    # SS VOD was removed
+    if had_ss_vod and not has_ss_vod:
+        asyncio.create_task(_sync_subscriber_roles(after, ss_vod_should_exist=False))
         return
 
 

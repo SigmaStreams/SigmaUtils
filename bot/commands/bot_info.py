@@ -78,7 +78,7 @@ def setup(bot):
                 "- Announcement flow with modal, ephemeral preview, optional role pings, and embed mode\n"
                 "- Move-server requests with destination picker, modal submit, and staff approve/deny\n"
                 "- Invite tracking stored in sqlite and exposed in `/whois`\n"
-                "- Auto-assigns **Member** on join and syncs Active Subscriber/Expired roles\n"
+                "- Auto-assigns **Member** on join and syncs SS VOD/Expired roles\n"
                 "- Suppresses Plex link previews and deletes pin system messages"
             ),
             inline=False,
