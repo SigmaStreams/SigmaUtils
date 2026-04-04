@@ -96,12 +96,24 @@ class AnnouncementPreviewView(discord.ui.View):
         self.ping_key = ping_key
         self.as_embed = as_embed
         self.body = body.strip()
+        self._refresh_buttons()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
             await interaction.response.send_message("This preview isn’t for you.", ephemeral=True)
             return False
         return True
+
+    def _refresh_buttons(self) -> None:
+        self.toggle_format_button.label = "Use regular message" if self.as_embed else "Use embed"
+
+    def _build_preview_message(self) -> tuple[str, discord.Embed | None]:
+        return _build_preview_payload(
+            channel_key=self.channel_key,
+            ping_key=self.ping_key,
+            body=self.body,
+            as_embed=self.as_embed,
+        )
 
     @discord.ui.button(label="Post", style=discord.ButtonStyle.success)
     async def post_button(self, interaction: discord.Interaction, _: discord.ui.Button):
@@ -160,6 +172,18 @@ class AnnouncementPreviewView(discord.ui.View):
                 as_embed=self.as_embed,
                 initial_body=self.body,
             )
+        )
+
+    @discord.ui.button(label="Use embed", style=discord.ButtonStyle.secondary)
+    async def toggle_format_button(self, interaction: discord.Interaction, _: discord.ui.Button):
+        self.as_embed = not self.as_embed
+        self._refresh_buttons()
+        content, embed = self._build_preview_message()
+        await interaction.response.edit_message(
+            content=content,
+            embed=embed,
+            view=self,
+            allowed_mentions=NO_PINGS,
         )
 
     @discord.ui.button(label="Discard", style=discord.ButtonStyle.secondary)
