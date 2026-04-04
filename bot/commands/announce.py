@@ -56,6 +56,23 @@ def _build_message_payload(*, body: str, role_ids: tuple[int, ...], as_embed: bo
     return clean_body, None
 
 
+def _build_preview_payload(*, channel_key: str, ping_key: str, body: str, as_embed: bool) -> tuple[str, discord.Embed | None]:
+    ping_label, role_ids = PING_OPTIONS[ping_key]
+    content, embed = _build_message_payload(body=body, role_ids=role_ids, as_embed=as_embed)
+
+    preview_header = (
+        "Preview only you can see.\n"
+        f"Channel: <#{ANNOUNCEMENT_CHANNELS[channel_key][0]}>\n"
+        f"Ping: {ping_label}\n"
+        f"Embed: {'yes' if as_embed else 'no'}"
+    )
+
+    if content is None:
+        return preview_header, embed
+
+    return f"{preview_header}\n\n{content}", embed
+
+
 async def _resolve_announcement_channel(guild: discord.Guild, channel_key: str) -> discord.TextChannel | None:
     channel_id, _ = ANNOUNCEMENT_CHANNELS[channel_key]
 
@@ -171,9 +188,13 @@ class AnnouncementModal(discord.ui.Modal, title="Create announcement"):
             await interaction.response.send_message("Run this in a server.", ephemeral=True)
             return
 
-        ping_label, role_ids = PING_OPTIONS[self.ping_key]
         body = str(self.announcement).strip()
-        content, embed = _build_message_payload(body=body, role_ids=role_ids, as_embed=self.as_embed)
+        content, embed = _build_preview_payload(
+            channel_key=self.channel_key,
+            ping_key=self.ping_key,
+            body=body,
+            as_embed=self.as_embed,
+        )
 
         preview_view = AnnouncementPreviewView(
             author_id=interaction.user.id,
@@ -183,15 +204,8 @@ class AnnouncementModal(discord.ui.Modal, title="Create announcement"):
             body=body,
         )
 
-        preview_header = (
-            "Preview only you can see.\n"
-            f"Channel: <#{ANNOUNCEMENT_CHANNELS[self.channel_key][0]}>\n"
-            f"Ping: {ping_label}\n"
-            f"Embed: {'yes' if self.as_embed else 'no'}"
-        )
-
         await interaction.response.send_message(
-            content=preview_header if content is None else f"{preview_header}\n\n{content}",
+            content=content,
             embed=embed,
             view=preview_view,
             ephemeral=True,
