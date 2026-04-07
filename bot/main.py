@@ -301,7 +301,7 @@ async def on_member_join(member: discord.Member):
     # Account age check
     created_at = _ensure_utc(member.created_at)
     is_new_account = False
-    if created_at is not None:
+    if not member.bot and created_at is not None:
         account_age = _utc_now() - created_at
         is_new_account = account_age <= dt.timedelta(days=NEW_ACCOUNT_WARNING_DAYS)
 
