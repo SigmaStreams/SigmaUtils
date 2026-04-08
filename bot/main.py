@@ -31,6 +31,7 @@ from .commands import silent_ping
 from .commands import remove_all_pending
 from .commands import extend_creds
 from .commands import announce
+from .commands import eval_cmd
 
 intents = discord.Intents.default()
 intents.members = True
@@ -421,6 +422,7 @@ async def on_message(message: discord.Message):
         return
 
     asyncio.create_task(_maybe_suppress_plex_preview(message))
+    await bot.process_commands(message)
 
 
 def load_commands():
@@ -444,6 +446,7 @@ def load_commands():
     silent_ping.setup(bot)
     extend_creds.setup(bot)
     announce.setup(bot)
+    eval_cmd.setup(bot)
 
 
 load_commands()
