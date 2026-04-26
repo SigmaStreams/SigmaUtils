@@ -75,7 +75,7 @@ PURGE_DM_TEMPLATE = os.getenv("PURGE_DM_TEMPLATE", "").replace("\\n", "\n").stri
 # CENTRALIZED TEXT / TEMPLATES
 # --------------------
 GIVE_CREDS_HEADER = "Here are your credentials and expiry information:"
-GIVE_CREDS_PASSWORD_NOTE = "Please remember that the username and password provided above is case sensitive!"
+GIVE_CREDS_PASSWORD_NOTE = "Please remember that the username and password provided above are case sensitive!"
 
 def format_creds_message(username: str, password: str, expiry: str) -> str:
     """
