@@ -15,6 +15,7 @@ from .config import (
     AUDIT_LOG_CHANNEL_ID,
 )
 from .views import CheckStatusPanelView
+from . import invite_panel
 from . import move_request_panel
 from .helpers import send_audit_embed
 from .db import ensure_db
@@ -244,6 +245,7 @@ async def on_ready():
     print(f"Allowed user IDs: {sorted(ALLOWED_USER_IDS)}")
 
     bot.add_view(CheckStatusPanelView())
+    bot.add_view(invite_panel.InvitePanelView())
 
     # Persistent view for move_server staff buttons
     bot.add_view(move_server.MoveServerActionView())

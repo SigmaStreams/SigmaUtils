@@ -3,17 +3,20 @@ from discord import app_commands
 
 from ..config import ALLOWED_USER_IDS
 from ..helpers import NO_PINGS
+from .. import invite_panel
 from .. import move_request_panel
 from ..views import CheckStatusPanelView
 
 
 PANEL_TYPE_CHECK_STATUS = "check_status"
+PANEL_TYPE_INVITE = "invite"
 PANEL_TYPE_MOVE_SERVER = "move_server"
 
 
 def _panel_choices() -> list[app_commands.Choice[str]]:
     return [
         app_commands.Choice(name="Purge status check", value=PANEL_TYPE_CHECK_STATUS),
+        app_commands.Choice(name="Invite", value=PANEL_TYPE_INVITE),
         app_commands.Choice(name="Move server request", value=PANEL_TYPE_MOVE_SERVER),
     ]
 
@@ -48,6 +51,10 @@ async def _post_move_server_panel(channel: discord.TextChannel, guild: discord.G
     )
 
 
+async def _post_invite_panel(channel: discord.TextChannel) -> discord.Message:
+    return await invite_panel.post_invite_panel(channel)
+
+
 def setup(bot):
     @bot.tree.command(
         name="panel",
@@ -80,6 +87,8 @@ def setup(bot):
         try:
             if panel_type.value == PANEL_TYPE_CHECK_STATUS:
                 msg = await _post_check_status_panel(target, guild)
+            elif panel_type.value == PANEL_TYPE_INVITE:
+                msg = await _post_invite_panel(target)
             elif panel_type.value == PANEL_TYPE_MOVE_SERVER:
                 msg = await _post_move_server_panel(target, guild)
             else:

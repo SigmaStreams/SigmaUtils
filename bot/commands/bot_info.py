@@ -163,6 +163,7 @@ def setup(bot):
             name="Panels and logging",
             value=(
                 "- `/panel panel_type:Purge status check` posts the persistent purge self-check panel\n"
+                "- `/panel panel_type:Invite` posts the persistent invite panel\n"
                 "- `/panel panel_type:Move server request` posts the persistent move-request panel\n"
                 "- Join/leave events and staff actions log to the audit channel when configured\n"
                 "- `/whois` includes stored invite-tracking details when available"

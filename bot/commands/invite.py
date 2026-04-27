@@ -154,204 +154,100 @@ async def _maybe_dm_on_behalf_recipient(
         return "failed"
 
 
-def setup(bot):
-    @bot.tree.command(
-        name="invite",
-        description="Create a 24h invite (unlimited uses) to the public landing channel.",
-    )
-    @app_commands.describe(
-        user="Optional: create the invite on behalf of another user (staff only).",
-    )
-    async def invite(interaction: discord.Interaction, user: discord.Member | None = None):
-        guild = interaction.guild
-        if guild is None:
-            await interaction.response.send_message("Run this in a server, not DMs.", ephemeral=True)
-            return
+async def run_invite_flow(
+    interaction: discord.Interaction,
+    user: discord.Member | None = None,
+    *,
+    reason_prefix: str = "/invite",
+) -> None:
+    guild = interaction.guild
+    if guild is None:
+        await interaction.response.send_message("Run this in a server, not DMs.", ephemeral=True)
+        return
 
-        me = guild.me
-        if me is None:
-            await interaction.response.send_message("Can't resolve bot member in this guild.", ephemeral=True)
-            return
+    me = guild.me
+    if me is None:
+        await interaction.response.send_message("Can't resolve bot member in this guild.", ephemeral=True)
+        return
 
-        owner = interaction.user
-        if user is not None:
-            if interaction.user.id not in ALLOWED_USER_IDS:
-                await interaction.response.send_message(
-                    "You are not authorized to create invites on behalf of another user.",
-                    ephemeral=True,
-                )
-                return
-            owner = user
-
-        target = await _get_target_channel(guild)
-        if target is None:
+    owner = interaction.user
+    if user is not None:
+        if interaction.user.id not in ALLOWED_USER_IDS:
             await interaction.response.send_message(
-                f"I can't find the invite target channel `{INVITE_TARGET_CHANNEL_ID}` in this server.",
+                "You are not authorized to create invites on behalf of another user.",
                 ephemeral=True,
             )
             return
+        owner = user
 
-        if not target.permissions_for(me).create_instant_invite:
-            await interaction.response.send_message(
-                f"I don’t have permission to create invites in <#{INVITE_TARGET_CHANNEL_ID}>.",
-                ephemeral=True,
-            )
-            return
+    target = await _get_target_channel(guild)
+    if target is None:
+        await interaction.response.send_message(
+            f"I can't find the invite target channel `{INVITE_TARGET_CHANNEL_ID}` in this server.",
+            ephemeral=True,
+        )
+        return
 
-        await interaction.response.defer(ephemeral=True)
+    if not target.permissions_for(me).create_instant_invite:
+        await interaction.response.send_message(
+            f"I don’t have permission to create invites in <#{INVITE_TARGET_CHANNEL_ID}>.",
+            ephemeral=True,
+        )
+        return
 
-        # Refresh baseline before checking for an active invite
-        try:
-            await snapshot_invites_to_db(guild)
-        except Exception:
-            pass
+    await interaction.response.defer(ephemeral=True)
 
-        existing_inv = await _find_existing_active_invite(guild, owner.id)
-        dm_status = None
-        reused_existing = existing_inv is not None
+    try:
+        await snapshot_invites_to_db(guild)
+    except Exception:
+        pass
 
-        if existing_inv is not None:
-            expires_at = _invite_expires_at(existing_inv)
+    existing_inv = await _find_existing_active_invite(guild, owner.id)
+    dm_status = None
 
-            if owner.id != interaction.user.id:
-                dm_status = await _maybe_dm_on_behalf_recipient(
-                    recipient=owner,
-                    requester=interaction.user,
-                    invite_url=existing_inv.url,
-                    expires_at=expires_at,
-                    reused_existing=True,
-                )
-
-            if owner.id == interaction.user.id:
-                if expires_at is not None:
-                    msg = (
-                        "You already have an active invite. Only one active invite is allowed at a time.\n\n"
-                        f"Your current invite (goes to <#{INVITE_TARGET_CHANNEL_ID}>, expires <t:{int(expires_at.timestamp())}:R>):\n"
-                        f"{existing_inv.url}"
-                    )
-                else:
-                    msg = (
-                        "You already have an active invite. Only one active invite is allowed at a time.\n\n"
-                        f"Your current invite (goes to <#{INVITE_TARGET_CHANNEL_ID}>):\n"
-                        f"{existing_inv.url}"
-                    )
-            else:
-                if expires_at is not None:
-                    msg = (
-                        f"{owner.mention} already has an active invite, so I didn’t create a new one.\n\n"
-                        f"Current invite (goes to <#{INVITE_TARGET_CHANNEL_ID}>, expires <t:{int(expires_at.timestamp())}:R>):\n"
-                        f"{existing_inv.url}"
-                    )
-                else:
-                    msg = (
-                        f"{owner.mention} already has an active invite, so I didn’t create a new one.\n\n"
-                        f"Current invite (goes to <#{INVITE_TARGET_CHANNEL_ID}>):\n"
-                        f"{existing_inv.url}"
-                    )
-
-                if dm_status == "sent":
-                    msg += f"\n\nI also DMed {owner.mention} so they know why they received this invite."
-                elif dm_status == "failed":
-                    msg += f"\n\nI couldn’t DM {owner.mention} (their DMs may be closed, or they may have the bot blocked)."
-
-            await interaction.followup.send(
-                msg,
-                ephemeral=True,
-                allowed_mentions=NO_PINGS,
-            )
-
-            if owner.id == interaction.user.id:
-                desc = (
-                    f"Owner: {owner} ({owner.id})\n"
-                    f"Target channel: <#{INVITE_TARGET_CHANNEL_ID}> ({INVITE_TARGET_CHANNEL_ID})\n"
-                    f"Existing code reused: `{existing_inv.code}`\n"
-                    f"Expires: {f'<t:{int(expires_at.timestamp())}:R>' if expires_at else 'no expiry'}"
-                )
-            else:
-                desc = (
-                    f"Requested by: {interaction.user} ({interaction.user.id})\n"
-                    f"Owner: {owner} ({owner.id})\n"
-                    f"Target channel: <#{INVITE_TARGET_CHANNEL_ID}> ({INVITE_TARGET_CHANNEL_ID})\n"
-                    f"Existing code reused: `{existing_inv.code}`\n"
-                    f"Expires: {f'<t:{int(expires_at.timestamp())}:R>' if expires_at else 'no expiry'}\n"
-                    f"Recipient DM: {dm_status or 'not attempted'}"
-                )
-
-            embed = discord.Embed(
-                title="Invite reused",
-                description=desc,
-            )
-            await send_audit_embed(guild, embed)
-            return
-
-        # No active invite found; create a new one
-        try:
-            reason = (
-                f"Invite created via /invite by {interaction.user} ({interaction.user.id})"
-                if owner.id == interaction.user.id
-                else f"Invite created via /invite by {interaction.user} ({interaction.user.id}) on behalf of {owner} ({owner.id})"
-            )
-
-            inv = await target.create_invite(
-                max_age=DEFAULT_MAX_AGE_SECONDS,
-                max_uses=DEFAULT_MAX_USES,
-                unique=True,
-                reason=reason,
-            )
-        except discord.Forbidden:
-            await interaction.followup.send("Invite creation failed (missing permissions).", ephemeral=True)
-            return
-        except discord.HTTPException:
-            await interaction.followup.send("Invite creation failed (Discord API error). Try again.", ephemeral=True)
-            return
-
-        try:
-            await snapshot_invites_to_db(guild)
-        except Exception:
-            pass
-
-        try:
-            created_at = inv.created_at.isoformat() if inv.created_at else None
-            uses = inv.uses or 0
-            await _store_invite_owner(
-                guild_id=guild.id,
-                code=inv.code,
-                owner_id=owner.id,
-                created_at=created_at,
-                uses=uses,
-            )
-        except Exception:
-            pass
-
-        expires_at = _now() + dt.timedelta(seconds=DEFAULT_MAX_AGE_SECONDS)
+    if existing_inv is not None:
+        expires_at = _invite_expires_at(existing_inv)
 
         if owner.id != interaction.user.id:
             dm_status = await _maybe_dm_on_behalf_recipient(
                 recipient=owner,
                 requester=interaction.user,
-                invite_url=inv.url,
+                invite_url=existing_inv.url,
                 expires_at=expires_at,
-                reused_existing=False,
+                reused_existing=True,
             )
 
         if owner.id == interaction.user.id:
-            msg = (
-                f"Here’s your invite link (goes to <#{INVITE_TARGET_CHANNEL_ID}>, expires <t:{int(expires_at.timestamp())}:R>):\n"
-                f"{inv.url}"
-            )
-        else:
-            msg = (
-                f"Here’s an invite link for {owner.mention} "
-                f"(goes to <#{INVITE_TARGET_CHANNEL_ID}>, expires <t:{int(expires_at.timestamp())}:R>):\n"
-                f"{inv.url}"
-            )
-            if dm_status == "sent":
-                msg += f"\n\nI also DMed {owner.mention} to let them know why they received this invite."
-            elif dm_status == "failed":
-                msg += (
-                    f"\n\nI couldn’t DM {owner.mention} "
-                    f"(their DMs may be closed, or they may have the bot blocked)."
+            if expires_at is not None:
+                msg = (
+                    "You already have an active invite. Only one active invite is allowed at a time.\n\n"
+                    f"Your current invite (goes to <#{INVITE_TARGET_CHANNEL_ID}>, expires <t:{int(expires_at.timestamp())}:R>):\n"
+                    f"{existing_inv.url}"
                 )
+            else:
+                msg = (
+                    "You already have an active invite. Only one active invite is allowed at a time.\n\n"
+                    f"Your current invite (goes to <#{INVITE_TARGET_CHANNEL_ID}>):\n"
+                    f"{existing_inv.url}"
+                )
+        else:
+            if expires_at is not None:
+                msg = (
+                    f"{owner.mention} already has an active invite, so I didn’t create a new one.\n\n"
+                    f"Current invite (goes to <#{INVITE_TARGET_CHANNEL_ID}>, expires <t:{int(expires_at.timestamp())}:R>):\n"
+                    f"{existing_inv.url}"
+                )
+            else:
+                msg = (
+                    f"{owner.mention} already has an active invite, so I didn’t create a new one.\n\n"
+                    f"Current invite (goes to <#{INVITE_TARGET_CHANNEL_ID}>):\n"
+                    f"{existing_inv.url}"
+                )
+
+            if dm_status == "sent":
+                msg += f"\n\nI also DMed {owner.mention} so they know why they received this invite."
+            elif dm_status == "failed":
+                msg += f"\n\nI couldn’t DM {owner.mention} (their DMs may be closed, or they may have the bot blocked)."
 
         await interaction.followup.send(
             msg,
@@ -363,25 +259,135 @@ def setup(bot):
             desc = (
                 f"Owner: {owner} ({owner.id})\n"
                 f"Target channel: <#{INVITE_TARGET_CHANNEL_ID}> ({INVITE_TARGET_CHANNEL_ID})\n"
-                f"Code: `{inv.code}`\n"
-                f"Max age: {DEFAULT_MAX_AGE_SECONDS}s\n"
-                f"Max uses: unlimited\n"
-                f"Expires: <t:{int(expires_at.timestamp())}:R>"
+                f"Existing code reused: `{existing_inv.code}`\n"
+                f"Expires: {f'<t:{int(expires_at.timestamp())}:R>' if expires_at else 'no expiry'}"
             )
         else:
             desc = (
                 f"Requested by: {interaction.user} ({interaction.user.id})\n"
                 f"Owner: {owner} ({owner.id})\n"
                 f"Target channel: <#{INVITE_TARGET_CHANNEL_ID}> ({INVITE_TARGET_CHANNEL_ID})\n"
-                f"Code: `{inv.code}`\n"
-                f"Max age: {DEFAULT_MAX_AGE_SECONDS}s\n"
-                f"Max uses: unlimited\n"
-                f"Expires: <t:{int(expires_at.timestamp())}:R>\n"
+                f"Existing code reused: `{existing_inv.code}`\n"
+                f"Expires: {f'<t:{int(expires_at.timestamp())}:R>' if expires_at else 'no expiry'}\n"
                 f"Recipient DM: {dm_status or 'not attempted'}"
             )
 
         embed = discord.Embed(
-            title="Invite created",
+            title="Invite reused",
             description=desc,
         )
         await send_audit_embed(guild, embed)
+        return
+
+    try:
+        reason = (
+            f"Invite created via {reason_prefix} by {interaction.user} ({interaction.user.id})"
+            if owner.id == interaction.user.id
+            else f"Invite created via {reason_prefix} by {interaction.user} ({interaction.user.id}) on behalf of {owner} ({owner.id})"
+        )
+
+        inv = await target.create_invite(
+            max_age=DEFAULT_MAX_AGE_SECONDS,
+            max_uses=DEFAULT_MAX_USES,
+            unique=True,
+            reason=reason,
+        )
+    except discord.Forbidden:
+        await interaction.followup.send("Invite creation failed (missing permissions).", ephemeral=True)
+        return
+    except discord.HTTPException:
+        await interaction.followup.send("Invite creation failed (Discord API error). Try again.", ephemeral=True)
+        return
+
+    try:
+        await snapshot_invites_to_db(guild)
+    except Exception:
+        pass
+
+    try:
+        created_at = inv.created_at.isoformat() if inv.created_at else None
+        uses = inv.uses or 0
+        await _store_invite_owner(
+            guild_id=guild.id,
+            code=inv.code,
+            owner_id=owner.id,
+            created_at=created_at,
+            uses=uses,
+        )
+    except Exception:
+        pass
+
+    expires_at = _now() + dt.timedelta(seconds=DEFAULT_MAX_AGE_SECONDS)
+
+    if owner.id != interaction.user.id:
+        dm_status = await _maybe_dm_on_behalf_recipient(
+            recipient=owner,
+            requester=interaction.user,
+            invite_url=inv.url,
+            expires_at=expires_at,
+            reused_existing=False,
+        )
+
+    if owner.id == interaction.user.id:
+        msg = (
+            f"Here’s your invite link (goes to <#{INVITE_TARGET_CHANNEL_ID}>, expires <t:{int(expires_at.timestamp())}:R>):\n"
+            f"{inv.url}"
+        )
+    else:
+        msg = (
+            f"Here’s an invite link for {owner.mention} "
+            f"(goes to <#{INVITE_TARGET_CHANNEL_ID}>, expires <t:{int(expires_at.timestamp())}:R>):\n"
+            f"{inv.url}"
+        )
+        if dm_status == "sent":
+            msg += f"\n\nI also DMed {owner.mention} to let them know why they received this invite."
+        elif dm_status == "failed":
+            msg += (
+                f"\n\nI couldn’t DM {owner.mention} "
+                f"(their DMs may be closed, or they may have the bot blocked)."
+            )
+
+    await interaction.followup.send(
+        msg,
+        ephemeral=True,
+        allowed_mentions=NO_PINGS,
+    )
+
+    if owner.id == interaction.user.id:
+        desc = (
+            f"Owner: {owner} ({owner.id})\n"
+            f"Target channel: <#{INVITE_TARGET_CHANNEL_ID}> ({INVITE_TARGET_CHANNEL_ID})\n"
+            f"Code: `{inv.code}`\n"
+            f"Max age: {DEFAULT_MAX_AGE_SECONDS}s\n"
+            f"Max uses: unlimited\n"
+            f"Expires: <t:{int(expires_at.timestamp())}:R>"
+        )
+    else:
+        desc = (
+            f"Requested by: {interaction.user} ({interaction.user.id})\n"
+            f"Owner: {owner} ({owner.id})\n"
+            f"Target channel: <#{INVITE_TARGET_CHANNEL_ID}> ({INVITE_TARGET_CHANNEL_ID})\n"
+            f"Code: `{inv.code}`\n"
+            f"Max age: {DEFAULT_MAX_AGE_SECONDS}s\n"
+            f"Max uses: unlimited\n"
+            f"Expires: <t:{int(expires_at.timestamp())}:R>\n"
+            f"Recipient DM: {dm_status or 'not attempted'}"
+        )
+
+    embed = discord.Embed(
+        title="Invite created",
+        description=desc,
+    )
+    await send_audit_embed(guild, embed)
+
+
+def setup(bot):
+    @bot.tree.command(
+        name="invite",
+        description="Create a 24h invite (unlimited uses) to the public landing channel.",
+    )
+    @app_commands.describe(
+        user="Optional: create the invite on behalf of another user (staff only).",
+    )
+    async def invite(interaction: discord.Interaction, user: discord.Member | None = None):
+        await run_invite_flow(interaction, user, reason_prefix="/invite")
