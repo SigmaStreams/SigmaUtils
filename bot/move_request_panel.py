@@ -1,11 +1,7 @@
 import discord
-from discord import app_commands
 
-from ..config import ALLOWED_USER_IDS
-from ..helpers import NO_PINGS
-
-# Reuse the existing move_server flow + config
-from . import move_server
+from .helpers import NO_PINGS
+from .commands import move_server
 
 
 PANEL_TITLE = "Move Server Requests"
@@ -33,7 +29,6 @@ async def _start_move_flow(interaction: discord.Interaction) -> None:
         await interaction.response.send_message("Run this in a server.", ephemeral=True)
         return
 
-    # Cooldown check
     on_cd, remaining = move_server._check_cooldown(user.id)  # type: ignore
     if on_cd:
         mins = max(1, remaining // 60)
@@ -83,6 +78,7 @@ class MovePanelView(discord.ui.View):
       - timeout=None
       - custom_id on non-link buttons
     """
+
     def __init__(self, guild_id: int | None = None):
         super().__init__(timeout=None)
 
@@ -103,42 +99,3 @@ class MovePanelView(discord.ui.View):
     )
     async def open_move(self, interaction: discord.Interaction, button: discord.ui.Button):
         await _start_move_flow(interaction)
-
-
-def setup(bot):
-    @bot.tree.command(
-        name="move_panel",
-        description="Staff-only: post a Move Server panel with a button users can click.",
-    )
-    @app_commands.describe(channel="Channel to post the panel in (defaults to current channel).")
-    async def move_panel(interaction: discord.Interaction, channel: discord.TextChannel | None = None):
-        if interaction.user.id not in ALLOWED_USER_IDS:
-            await interaction.response.send_message("You are not authorized to use this command.", ephemeral=True)
-            return
-
-        guild = interaction.guild
-        if guild is None:
-            await interaction.response.send_message("Run this in a server.", ephemeral=True)
-            return
-
-        target = channel or interaction.channel
-        if not isinstance(target, discord.TextChannel):
-            await interaction.response.send_message("Pick a text channel to post the panel in.", ephemeral=True)
-            return
-
-        embed = discord.Embed(title=PANEL_TITLE, description=PANEL_BODY, color=PANEL_COLOR)
-
-        try:
-            msg = await target.send(
-                embed=embed,
-                view=MovePanelView(guild.id),
-                allowed_mentions=NO_PINGS,
-            )
-        except discord.Forbidden:
-            await interaction.response.send_message("I can’t post in that channel (missing perms).", ephemeral=True)
-            return
-        except discord.HTTPException:
-            await interaction.response.send_message("Failed to post the panel (Discord API error).", ephemeral=True)
-            return
-
-        await interaction.response.send_message(f"Posted panel: {msg.jump_url}", ephemeral=True, allowed_mentions=NO_PINGS)

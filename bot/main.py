@@ -15,15 +15,16 @@ from .config import (
     AUDIT_LOG_CHANNEL_ID,
 )
 from .views import CheckStatusPanelView
+from . import move_request_panel
 from .helpers import send_audit_embed
 from .db import ensure_db
 from .invite_tracking import snapshot_invites_to_db, detect_used_invite, log_join_event
 
 # commands
-from .commands import checkme, check, check_panel, list_roles, purge, bot_info, give_creds, test_purge_dm, whois, serverinfo
+from .commands import checkme, check, list_roles, purge, bot_info, give_creds, test_purge_dm, whois, serverinfo
 from .commands import invite as invite_cmd
 from .commands import move_server
-from .commands import move_panel
+from .commands import panel
 from .commands import discord_info
 from .commands import afk
 from .commands import server_status
@@ -246,7 +247,7 @@ async def on_ready():
 
     # Persistent view for move_server staff buttons
     bot.add_view(move_server.MoveServerActionView())
-    bot.add_view(move_panel.MovePanelView())
+    bot.add_view(move_request_panel.MovePanelView())
 
     await ensure_db()
 
@@ -428,7 +429,6 @@ async def on_message(message: discord.Message):
 def load_commands():
     checkme.setup(bot)
     check.setup(bot)
-    check_panel.setup(bot)
     list_roles.setup(bot)
     purge.setup(bot)
     bot_info.setup(bot)
@@ -439,7 +439,7 @@ def load_commands():
     serverinfo.setup(bot)
     discord_info.setup(bot)
     move_server.setup(bot)
-    move_panel.setup(bot)
+    panel.setup(bot)
     remove_all_pending.setup(bot)
     afk.setup(bot)
     server_status.setup(bot)

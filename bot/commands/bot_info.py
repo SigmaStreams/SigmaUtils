@@ -132,10 +132,10 @@ def setup(bot):
             name="Staff tools",
             value=(
                 "Slash commands:\n"
-                "- `/announce`, `/bot_info`, `/check`, `/check_panel`\n"
+                "- `/announce`, `/bot_info`, `/check`, `/panel`\n"
                 "- `/give_creds`, `/extend_creds`, `/test_purge_dm`\n"
                 "- `/list_only_allowed_roles`, `/purge_eligible`, `/remove_all_pending`\n"
-                "- `/move_panel`, `/silent_ping`, `/whois`, `/afk_clear`\n"
+                "- `/silent_ping`, `/whois`, `/afk_clear`\n"
                 "- `/server_status set`, `/server_status clear`, `/server_status list`\n\n"
                 "Limited staff path:\n"
                 "- `/invite user:<member>` allows invite creation on behalf of someone else\n\n"
@@ -162,8 +162,8 @@ def setup(bot):
         embed.add_field(
             name="Panels and logging",
             value=(
-                "- `/check_panel` posts the persistent purge self-check panel\n"
-                "- `/move_panel` posts the persistent move-request panel\n"
+                "- `/panel panel_type:Purge status check` posts the persistent purge self-check panel\n"
+                "- `/panel panel_type:Move server request` posts the persistent move-request panel\n"
                 "- Join/leave events and staff actions log to the audit channel when configured\n"
                 "- `/whois` includes stored invite-tracking details when available"
             ),
